@@ -1,22 +1,84 @@
 import timeit
-import cv2
-import numpy as np    
+import numpy as np 
+import cv2 
 import threading
 import time
 
+def getTemplate():
+    template = cv2.imread('images/temp3.png',0)
+    return template
+
+def getTemplateDims():
+    template=getTemplate()
+    w,h = template.shape[::-1]
+    return w,h
+
+def getSourceVideo():
+    #cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture('videos/mvk.avi')
+    return cap
+
+def getThreshold():
+    threshold = 0.8715
+    return threshold
+
+def resizeFrame(img):
+    scale_percent = 30 # percent of original size
+    width = int(img.shape[1] * scale_percent / 100)
+    height = int(img.shape[0] * scale_percent / 100)
+    dim = (width, height) 
+    resized = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
+    return resized
 
 
-template = cv2.imread('images/temp3.png',0)
-cap = cv2.VideoCapture('videos/mvk.avi')
-#cap = cv2.VideoCapture(1)
-w,h = template.shape[::-1]
-print(w)
-print(h) 
- 
 
-while(1):
+def detectHeadlights(res,frame,img_bw1,pt):
     
+    threshold = getThreshold()
+    print(threshold,res)
     
+    w,h = getTemplateDims() 
+
+    img = resizeFrame(img_bw1)
+     
+    #avg color intensity of each row
+    avg_color_per_row = np.average(img, axis=0)
+    #avg color intensity of each frame
+    avg_color = np.average(avg_color_per_row, axis=0)
+
+
+
+    det=0
+    
+    if(avg_color< 0.19):
+        print("high beam",avg_color)
+
+        if np.any(res >=threshold):
+            
+            det=1;
+        
+            cv2.rectangle(frame, pt, (pt[0] + w, pt[1] + h), (0,205,255), 1)
+            cv2.rectangle(img_bw1, pt, (pt[0] + w, pt[1] + h), (0,205,255), 1)
+            return det
+    
+        elif np.any(res < threshold):
+            det=0  
+            return det
+        
+
+    else:
+        print("low beam",avg_color)
+        return 0 
+    #print(np.array(res))
+
+                    
+    
+
+
+cap  = getSourceVideo()
+template=getTemplate()
+while(getSourceVideo().isOpened()):
+       
     ret, frame = cap.read()
 
     img =cv2.GaussianBlur(frame,(15,15), 0) 
@@ -29,43 +91,17 @@ while(1):
     
     res = cv2.matchTemplate(img_bw1,template,cv2.TM_CCOEFF_NORMED)
 
-    threshold = 0.8715
-    
-    #avg color intensity of each row
-    avg_color_per_row = np.average(img_bw1, axis=0)
-    #avg color intensity of each frame
-    avg_color = np.average(avg_color_per_row, axis=0)
-    
-    if(avg_color< 0.19):
-        print("high beam",avg_color)
-
-    else:
-        print("low beam",avg_color)
-            
-    loc = np.where( res >= .92*threshold)
+    threshold = getThreshold()
+           
+    loc = np.where(res >= .92*threshold)
              
     for pt in zip(*loc[::-1]):
-        def detect1():
-                    
-            if np.any(res >=threshold):
-                
-                det=1;
-                
-                cv2.rectangle(frame, pt, (pt[0] + w, pt[1] + h), (0,205,255), 1)
-                cv2.rectangle(img_bw1, pt, (pt[0] + w, pt[1] + h), (0,205,255), 1)
-                return det
-            
-            elif np.any(res < threshold):
-                        
-                
-                det=0;  
-                return det           
-
-        if detect1()==1:
+                  
+        if detectHeadlights(res,frame,img_bw1,pt)==1:
                     
            print("dim");
 
-        elif detect1()==0:
+        elif detectHeadlights(res,frame,img_bw1,pt)==0:
                     
            print("bright");
     
